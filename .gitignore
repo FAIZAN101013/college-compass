@@ -30,8 +30,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — real secrets are never committed, but the template is,
+# so a reviewer can see exactly what configuration the app requires.
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +41,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Prisma client is generated code — regenerated on every install via the
+# "postinstall" script, so it must not be committed.
+/src/generated/

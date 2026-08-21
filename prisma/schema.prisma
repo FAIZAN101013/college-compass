@@ -1,0 +1,255 @@
+// College Compass — data model
+//
+// Design principles used throughout this schema:
+//   1. Money is stored as Int (whole rupees). Never Float — binary floats
+//      cannot represent decimal currency exactly and errors compound.
+//   2. Aggregates that the listing page filters/sorts on are denormalised
+//      onto College, because recomputing them with JOIN + GROUP BY on every
+//      keystroke does not scale. See the note above College.rating.
+//   3. Anything that changes year over year (placements) is a time series,
+//      not a column, so we can show trends without a migration.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums — closed sets. Using enums instead of String means Postgres itself
+// rejects a typo like "Goverment", and Prisma gives us autocomplete plus a
+// compile error if we misspell it in TypeScript.
+// ---------------------------------------------------------------------------
+
+enum CollegeType {
+  GOVERNMENT
+  PRIVATE
+  DEEMED
+  AUTONOMOUS
+}
+
+enum Stream {
+  ENGINEERING
+  MANAGEMENT
+  MEDICAL
+  LAW
+  SCIENCE
+  COMMERCE
+  ARTS
+  DESIGN
+}
+
+enum Degree {
+  BTECH
+  MTECH
+  MBA
+  BBA
+  MBBS
+  BDS
+  BSC
+  MSC
+  BA
+  BCOM
+  LLB
+  BDES
+}
+
+// ---------------------------------------------------------------------------
+// College — the root entity. Every read path starts here.
+// ---------------------------------------------------------------------------
+
+model College {
+  id String @id @default(cuid())
+
+  // slug is the public URL identity: /colleges/iit-bombay reads better than
+  // /colleges/clx3k9f0000. Unique, so it works as a lookup key.
+  slug      String @unique
+  name      String
+  shortName String
+
+  // Location is flat (city/state strings) rather than a normalised City table.
+  // Deliberate: we only ever filter and display these, never manage them as
+  // their own entity. A City table would add a JOIN to every listing query
+  // and buy us nothing at this scale.
+  city  String
+  state String
+
+  type            CollegeType
+  streams         Stream[]
+  establishedYear Int
+
+  // NIRF is the official government ranking in India. Nullable because many
+  // colleges are simply unranked — null means "unranked", 0 would be a lie.
+  nirfRank Int?
+
+  // --- Denormalised aggregates -------------------------------------------
+  // These are DERIVED from Review and Course rows. We copy them here because
+  // the listing page must filter and sort by them across the whole table.
+  // Kept in sync by the seed script and by the review-create endpoint.
+  // Tradeoff accepted: slightly harder writes in exchange for fast reads,
+  // which is the right call for a read-heavy discovery product.
+  rating       Float @default(0) // 0.0 - 5.0, average of Review.rating
+  reviewCount  Int   @default(0)
+  avgAnnualFee Int   @default(0) // whole rupees, average across Course rows
+  // -----------------------------------------------------------------------
+
+  description String  @db.Text
+  imageUrl    String
+  website     String?
+  approvedBy  String[] // e.g. ["AICTE", "UGC", "NAAC A++"]
+  facilities  String[] // e.g. ["Hostel", "Library", "Sports Complex"]
+
+  courses    Course[]
+  placements Placement[]
+  reviews    Review[]
+  savedBy    SavedCollege[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Indexes mirror exactly what the listing API filters and sorts on.
+  // An index the query planner never uses is dead weight on every write,
+  // so there is one here for each real access pattern and no more.
+  @@index([state])
+  @@index([type])
+  @@index([rating])
+  @@index([avgAnnualFee])
+  @@index([nirfRank])
+}
+
+// ---------------------------------------------------------------------------
+// Course — what you can actually study, and what it costs.
+// ---------------------------------------------------------------------------
+
+model Course {
+  id        String  @id @default(cuid())
+  collegeId String
+
+  // onDelete: Cascade — a course cannot outlive its college. Without this,
+  // deleting a college would fail on a foreign key violation and leave
+  // orphaned rows behind.
+  college College @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+
+  name           String // "B.Tech Computer Science and Engineering"
+  degree         Degree
+  stream         Stream
+  durationMonths Int      // months, not years — an MBA is 24, a PGDM can be 15
+  annualFee      Int      // whole rupees
+  totalSeats     Int
+  examsAccepted  String[] // ["JEE Advanced"] — drives the exam filter
+
+  @@index([collegeId])
+  @@index([stream])
+}
+
+// ---------------------------------------------------------------------------
+// Placement — one row per college PER YEAR. This is a time series.
+// ---------------------------------------------------------------------------
+
+model Placement {
+  id        String  @id @default(cuid())
+  collegeId String
+  college   College @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+
+  year Int
+
+  // Median leads because it is far harder to game than average — one outlier
+  // offer moves the average a lot, it barely moves the median.
+  medianPackage  Int // whole rupees per year
+  averagePackage Int
+  highestPackage Int
+  placementRate  Float // percentage, 0 - 100
+  topRecruiters  String[]
+
+  // A college cannot have two placement records for the same year. This is
+  // the database enforcing that invariant, not application code — which means
+  // a buggy import or a double-clicked form physically cannot corrupt it.
+  @@unique([collegeId, year])
+  @@index([collegeId])
+}
+
+// ---------------------------------------------------------------------------
+// Review — student feedback. Feeds College.rating.
+// ---------------------------------------------------------------------------
+
+model Review {
+  id        String  @id @default(cuid())
+  collegeId String
+  college   College @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+
+  // Nullable: seeded reviews have no real user behind them, and we still want
+  // to accept them. A review written through the app carries a userId.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  authorName String
+  rating     Int    // 1 - 5, validated in Zod at the API boundary
+  title      String
+  body       String @db.Text
+  courseName String?
+  gradYear   Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([collegeId])
+}
+
+// ---------------------------------------------------------------------------
+// Auth and saved items
+// ---------------------------------------------------------------------------
+
+model User {
+  id String @id @default(cuid())
+
+  // unique is the login guarantee — two accounts cannot share an email,
+  // and Postgres enforces it even if the application logic has a bug.
+  email String @unique
+
+  // bcrypt hash. The plaintext password is never stored, never logged,
+  // and never leaves the request handler.
+  passwordHash String
+  name         String
+
+  savedColleges    SavedCollege[]
+  savedComparisons SavedComparison[]
+  reviews          Review[]
+
+  createdAt DateTime @default(now())
+}
+
+model SavedCollege {
+  id        String  @id @default(cuid())
+  userId    String
+  collegeId String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  college   College @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  // Makes saving idempotent: clicking "save" twice cannot create two rows.
+  // We lean on this with an upsert instead of a read-then-write, which would
+  // have a race condition between the read and the write.
+  @@unique([userId, collegeId])
+  @@index([userId])
+}
+
+model SavedComparison {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name String
+
+  // A plain String[] of college ids rather than a join table. Deliberate:
+  // a comparison is an ordered snapshot the user made, not a live many-to-many
+  // relationship. Order matters here, and a join table does not preserve order
+  // without an extra position column. We validate the ids on read.
+  collegeIds String[]
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
