@@ -3,6 +3,20 @@ import { CollegeCardSkeleton } from "@/components/colleges/CollegeCard";
 /**
  * Route-level loading UI.
  *
+ * WHY THIS LIVES IN A (browse) ROUTE GROUP — do not move it up a level.
+ *
+ * A loading.tsx wraps its whole segment, INCLUDING nested dynamic routes. With
+ * this file at app/colleges/, its Suspense boundary also covered
+ * /colleges/[slug], so Next began streaming that response — headers and status
+ * 200 already sent — before the page body ran. When the page then called
+ * notFound() for an unknown slug the 404 page rendered correctly but the
+ * status stayed 200: a soft 404, which crawlers index as a real page and
+ * uptime monitors never flag.
+ *
+ * Putting the listing in a (browse) group scopes this boundary to the listing
+ * alone. Route groups do not appear in the URL, so /colleges is unchanged,
+ * and /colleges/[slug] now returns a genuine 404. Verified with curl.
+ *
  * Next.js renders this automatically while the page's async work is in
  * flight, wrapping the route in a Suspense boundary for us. It is what the
  * user sees on a cold navigation to /colleges.
