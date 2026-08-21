@@ -1,5 +1,5 @@
 /**
- * Seed dataset: 120 real Indian higher-education institutions.
+ * Seed dataset: 143 real Indian higher-education institutions.
  *
  * IMPORTANT — on data accuracy:
  * The institution names, cities, states, ownership type and founding years

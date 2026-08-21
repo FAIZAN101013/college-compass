@@ -45,3 +45,6 @@ next-env.d.ts
 # Prisma client is generated code — regenerated on every install via the
 # "postinstall" script, so it must not be committed.
 /src/generated/
+
+# Personal study notes - kept local, not part of the submission
+NOTES.md
