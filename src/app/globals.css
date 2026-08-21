@@ -1,26 +1,169 @@
 @import "tailwindcss";
 
+/**
+ * Design tokens.
+ *
+ * Tailwind v4 is configured in CSS rather than a JS config file. Anything
+ * declared inside @theme becomes a real Tailwind utility, so --color-brand-600
+ * gives us bg-brand-600, text-brand-600, border-brand-600 and so on.
+ *
+ * Colours are defined once here and referenced everywhere else. The rule the
+ * whole file follows: no component hardcodes a hex value. That is what makes
+ * dark mode a change to this file instead of a change to forty components.
+ */
+@theme {
+  /* Brand: deep indigo. Reads as considered and institutional rather than
+     playful, which suits a product people use to make an expensive decision. */
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+
+  /* Semantic accents, used for meaning and never for decoration. */
+  --color-positive: #059669;
+  --color-warning: #d97706;
+  --color-negative: #dc2626;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --radius-card: 0.75rem;
+}
+
+/**
+ * Surface tokens.
+ *
+ * Named by ROLE (surface, muted, border) rather than by appearance (white,
+ * grey-100). A token called --color-white that turns dark in dark mode is a
+ * lie you have to remember; a token called --surface is simply correct in
+ * both themes.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f8fafc;
+  --border-subtle: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --ring: #6366f1;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
+/**
+ * Dark mode follows the operating system.
+ *
+ * No toggle: a theme switcher needs persisted state, an inline script to
+ * avoid a flash of the wrong theme on first paint, and a hydration-safe
+ * initial render. That is real complexity, and respecting the system setting
+ * is what most people want anyway.
+ */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --surface: #0b1120;
+    --surface-raised: #131c31;
+    --surface-sunken: #0f1729;
+    --border-subtle: #1e293b;
+    --border-strong: #334155;
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --text-muted: #64748b;
+    --ring: #818cf8;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Expose the surface tokens as Tailwind utilities too, so components can use
+   bg-surface / text-secondary instead of arbitrary-value syntax. */
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+}
+
+@layer base {
+  * {
+    /* Tailwind v4 no longer resets borders to the theme colour, so an element
+       with `border` and no colour renders in the browser default. Setting it
+       once here keeps every border consistent without repeating the class. */
+    border-color: var(--border-subtle);
+  }
+
+  html {
+    /* Anchor links and pagination jumps land below the sticky header rather
+       than underneath it. */
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    background-color: var(--surface-sunken);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /**
+   * A single visible focus style for keyboard users.
+   *
+   * :focus-visible rather than :focus, so the ring appears for keyboard
+   * navigation but not on mouse clicks. Removing focus outlines entirely is
+   * the most common accessibility failure on the web — it makes a site
+   * impossible to navigate without a mouse.
+   */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /**
+   * Honour a reduced-motion preference. For some people motion is not a
+   * stylistic preference but a trigger for nausea or migraine.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /**
+   * Visible only to screen readers. Used for labels that would be redundant
+   * visually (an icon already carries the meaning) but which a screen reader
+   * needs in order to announce the control at all.
+   */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  /* Clamp text to N lines with an ellipsis, for card descriptions. */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
