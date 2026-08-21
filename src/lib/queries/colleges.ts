@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { CollegeFilters, SortOption } from "@/lib/query/college-filters";
 import type { Prisma } from "@/generated/prisma/client";
@@ -341,27 +342,44 @@ export type FilterOptions = {
  * Exams need a manual distinct pass because they live in a String[] column,
  * and SQL DISTINCT over an array column compares whole arrays, not elements.
  */
-export async function getFilterOptions(): Promise<FilterOptions> {
-  // Sequential for the same reason as findColleges above: transactions and
-  // concurrent connections both fight Neon's pooler, and these three reads
-  // have no consistency requirement between them at all.
-  const states = await prisma.college.findMany({
-    distinct: ["state"],
-    select: { state: true },
-    orderBy: { state: "asc" },
+async function loadFilterOptions(): Promise<FilterOptions> {
+  // groupBy returns DISTINCT (state, city) pairs, which gives both lists from
+  // a single round trip with Postgres doing the de-duplication.
+  //
+  // The obvious alternatives are each worse in a different way: two separate
+  // `distinct` queries cost two round trips, and selecting every row to
+  // de-duplicate in JavaScript transfers the whole table and stops scaling the
+  // moment the catalogue is large. This does the work in the database and
+  // returns a result bounded by the number of distinct cities.
+  const locations = await prisma.college.groupBy({
+    by: ["state", "city"],
+    orderBy: [{ state: "asc" }, { city: "asc" }],
   });
-  const cities = await prisma.college.findMany({
-    distinct: ["city"],
-    select: { city: true },
-    orderBy: { city: "asc" },
-  });
+
+  // Exams need de-duplicating in application code because they live in a
+  // String[] column, and SQL DISTINCT over an array column compares whole
+  // arrays rather than their elements.
   const courseExams = await prisma.course.findMany({ select: { examsAccepted: true } });
 
-  const exams = [...new Set(courseExams.flatMap((course) => course.examsAccepted))].sort();
-
   return {
-    states: states.map((row) => row.state),
-    cities: cities.map((row) => row.city),
-    exams,
+    states: [...new Set(locations.map((row) => row.state))],
+    cities: [...new Set(locations.map((row) => row.city))],
+    exams: [...new Set(courseExams.flatMap((course) => course.examsAccepted))].sort(),
   };
 }
+
+/**
+ * Cached across requests for an hour.
+ *
+ * These options change only when the catalogue gains a genuinely new state,
+ * city or entrance exam — which is close to never — yet without caching every
+ * page view paid for both queries. Against a database in another region that
+ * was most of the page's response time.
+ *
+ * The "colleges" tag means a future admin write can call revalidateTag
+ * ("colleges") to refresh this immediately rather than waiting out the hour.
+ */
+export const getFilterOptions = unstable_cache(loadFilterOptions, ["filter-options"], {
+  revalidate: 3600,
+  tags: ["colleges"],
+});
