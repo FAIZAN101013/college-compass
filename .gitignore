@@ -55,3 +55,8 @@ CLAUDE.md
 
 # Session state file - local only, never committed
 PROJECT_STATE.md
+
+# Prep and working files - local only, never part of the submission
+COMMITS.md
+INTERVIEW.md
+LOOM_SCRIPT.md
