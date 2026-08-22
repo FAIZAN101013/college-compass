@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { StarRating } from "@/components/ui/StarRating";
+import { SaveButton } from "@/components/saved/SaveButton";
 import { formatAnnualFee, formatNirf, formatReviewCount, titleCaseEnum } from "@/lib/format";
 import type { CollegeCard as CollegeCardData } from "@/lib/queries/colleges";
 
@@ -43,7 +44,15 @@ function initialsOf(shortName: string): string {
     .join("");
 }
 
-export function CollegeCard({ college }: { college: CollegeCardData }) {
+export function CollegeCard({
+  college,
+  isSaved = false,
+  isAuthenticated = false,
+}: {
+  college: CollegeCardData;
+  isSaved?: boolean;
+  isAuthenticated?: boolean;
+}) {
   return (
     <article className="group relative flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-border-subtle bg-surface-raised transition-shadow hover:shadow-lg focus-within:shadow-lg">
       <div className="flex items-start gap-3 p-4">
@@ -76,6 +85,18 @@ export function CollegeCard({ college }: { college: CollegeCardData }) {
             {college.city}, {college.state}
           </p>
         </div>
+
+        {/*
+          The save button sits ON TOP of the card's stretched link, which is
+          why it carries relative + z-10 and stops click propagation. This is
+          the cost of the stretched-link pattern: anything interactive on the
+          card has to be lifted above the overlay deliberately.
+        */}
+        <SaveButton
+          collegeId={college.id}
+          initialSaved={isSaved}
+          isAuthenticated={isAuthenticated}
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 px-4">

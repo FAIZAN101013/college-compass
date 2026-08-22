@@ -7,6 +7,8 @@ import { SortSelect } from "@/components/colleges/SortSelect";
 import { hasActiveFilters, parseCollegeFiltersSafe } from "@/lib/query/college-filters";
 import { findColleges, getFilterOptions } from "@/lib/queries/colleges";
 import { formatNumber } from "@/lib/format";
+import { getSession } from "@/lib/auth/session";
+import { getSavedCollegeIds } from "@/lib/queries/saved";
 
 export const metadata: Metadata = {
   title: "Browse colleges",
@@ -64,6 +66,13 @@ export default async function CollegesPage({
   const result = await findColleges(filters);
   const options = await getFilterOptions();
 
+  // Which of these results the signed-in user has already saved, so the
+  // bookmark icons render in the right state on first paint rather than
+  // popping after a client-side fetch. Signed-out visitors skip the query
+  // entirely.
+  const session = await getSession();
+  const savedIds = session ? await getSavedCollegeIds(session.id) : new Set<string>();
+
   const filtersApplied = hasActiveFilters(filters);
   const { pageInfo } = result;
   const firstOnPage = (pageInfo.page - 1) * pageInfo.pageSize + 1;
@@ -111,7 +120,12 @@ export default async function CollegesPage({
             <>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {result.items.map((college) => (
-                  <CollegeCard key={college.id} college={college} />
+                  <CollegeCard
+                    key={college.id}
+                    college={college}
+                    isSaved={savedIds.has(college.id)}
+                    isAuthenticated={Boolean(session)}
+                  />
                 ))}
               </div>
 

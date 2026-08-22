@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
+import { SaveButton } from "@/components/saved/SaveButton";
 import { StarRating } from "@/components/ui/StarRating";
 import { CoursesTable } from "@/components/colleges/CoursesTable";
 import { PlacementsPanel } from "@/components/colleges/PlacementsPanel";
@@ -19,6 +20,8 @@ import {
   formatRupees,
   titleCaseEnum,
 } from "@/lib/format";
+import { getSession } from "@/lib/auth/session";
+import { getSavedCollegeIds } from "@/lib/queries/saved";
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -66,6 +69,9 @@ export default async function CollegeDetailPage({ params }: Params) {
    */
   if (!college) notFound();
 
+  const session = await getSession();
+  const savedIds = session ? await getSavedCollegeIds(session.id) : new Set<string>();
+
   const trend = buildPlacementTrend(college.placements);
   const similar = await getSimilarColleges(college);
 
@@ -112,6 +118,14 @@ export default async function CollegeDetailPage({ params }: Params) {
             <p className="mt-1 text-xs text-text-muted">
               {formatNumber(college.reviewCount)} reviews
             </p>
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+              <SaveButton
+                collegeId={college.id}
+                initialSaved={savedIds.has(college.id)}
+                isAuthenticated={Boolean(session)}
+                variant="full"
+              />
+            </div>
             <Link
               href={`/compare?ids=${college.slug}`}
               className="mt-3 inline-flex rounded-lg border border-brand-600 px-3 py-1.5 text-sm font-medium text-brand-600 transition-colors hover:bg-brand-50 dark:hover:bg-brand-900/30"
