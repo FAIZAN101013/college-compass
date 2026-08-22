@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SignOutButton } from "@/components/auth/SignOutButton";
+import { getSession } from "@/lib/auth/session";
 import "./globals.css";
 
 /**
@@ -20,7 +22,16 @@ export const metadata: Metadata = {
     "Search, filter and compare Indian colleges by fees, placements, ranking and reviews.",
 };
 
-function Header() {
+/**
+ * An async Server Component, so it can read the session cookie directly.
+ *
+ * No client-side auth state, no "loading…" flash, and no possibility of the
+ * header disagreeing with what the server will actually let you do — the same
+ * getSession() call guards the pages themselves.
+ */
+async function Header() {
+  const session = await getSession();
+
   return (
     <header className="sticky top-0 z-40 border-b border-border-subtle bg-surface/85 backdrop-blur-sm">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4">
@@ -47,12 +58,30 @@ function Header() {
           >
             Compare
           </Link>
-          <Link
-            href="/login"
-            className="ml-1 rounded-lg bg-brand-600 px-3.5 py-2 font-medium text-white transition-colors hover:bg-brand-700"
-          >
-            Sign in
-          </Link>
+
+          {session ? (
+            <>
+              <Link
+                href="/saved"
+                className="rounded-lg px-3 py-2 font-medium text-text-secondary transition-colors hover:bg-surface-sunken hover:text-text-primary"
+              >
+                Saved
+              </Link>
+              {/* First name only — a header is not the place for a full name
+                  to wrap or push the nav around on a narrow screen. */}
+              <span className="ml-1 hidden text-text-muted sm:inline">
+                {session.name.split(" ")[0]}
+              </span>
+              <SignOutButton />
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="ml-1 rounded-lg bg-brand-600 px-3.5 py-2 font-medium text-white transition-colors hover:bg-brand-700"
+            >
+              Sign in
+            </Link>
+          )}
         </nav>
       </div>
     </header>
